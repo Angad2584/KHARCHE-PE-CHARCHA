@@ -44,6 +44,8 @@
     background: var(--surface2); display: grid; place-items: center; cursor: pointer;
   }
   .iconbtn svg { width: 18px; height: 18px; stroke: var(--muted); }
+  .iconbtn.spin svg { animation: spin 0.9s linear infinite; stroke: var(--accent); }
+  @keyframes spin { to { transform: rotate(360deg); } }
 
   .month { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
   .month b { font-size: 17px; font-weight: 600; }
@@ -324,31 +326,55 @@ async function processRawSms() {
   return updates.length;
 }
 
+/* Last-seen data per month is kept on the phone so the app opens instantly,
+   then refreshes from Airtable in the background. */
+const cacheKey = d => "cache." + ym(d);
+function readCache(d) { try { return JSON.parse(store.get(cacheKey(d), "null")); } catch { return null; } }
+function writeCache(d, recs) { store.set(cacheKey(d), JSON.stringify(recs)); }
+
+async function fetchMonth(month) {
+  const formula = `DATETIME_FORMAT({${F.date}}, 'YYYY-MM') = '${ym(month)}'`;
+  let all = [], offset = "";
+  do {
+    const q = new URLSearchParams({ filterByFormula: formula, pageSize: "100" });
+    q.append("sort[0][field]", F.date); q.append("sort[0][direction]", "desc");
+    if (offset) q.set("offset", offset);
+    const page = await at("?" + q.toString());
+    all = all.concat(page.records || []);
+    offset = page.offset || "";
+  } while (offset);
+  return all;
+}
+
+let loadSeq = 0;
 async function loadMonth() {
   const { base, token } = cfg();
   if (!base || !token) { renderStatus("Open Settings (gear icon) and add your Airtable base ID and token to get started."); return; }
-  renderStatus("Loading…");
+  const month = new Date(viewMonth), seq = ++loadSeq;
+
+  // 1. Show what we had last time, immediately
+  const cached = readCache(month);
+  if (cached) { records = cached; render(); } else { renderStatus("Loading…"); }
+  setSyncing(true);
+
+  // 2. Refresh in the background: new SMS and this month's rows at the same time
   try {
-    try {
-      const n = await processRawSms();
-      if (n) toast(`${n} new SMS ${n === 1 ? "entry" : "entries"} added`);
-    } catch (e) { toast("Couldn't read new SMS — " + e.message); }
-    const formula = `DATETIME_FORMAT({${F.date}}, 'YYYY-MM') = '${ym(viewMonth)}'`;
-    let all = [], offset = "";
-    do {
-      const q = new URLSearchParams({ filterByFormula: formula, pageSize: "100" });
-      q.append("sort[0][field]", F.date); q.append("sort[0][direction]", "desc");
-      if (offset) q.set("offset", offset);
-      const page = await at("?" + q.toString());
-      all = all.concat(page.records || []);
-      offset = page.offset || "";
-    } while (offset);
-    records = all;
-    render();
+    const [fresh, added] = await Promise.all([
+      fetchMonth(month),
+      processRawSms().catch(e => { toast("Couldn't read new SMS — " + e.message); return 0; })
+    ]);
+    const finalRecs = added ? await fetchMonth(month) : fresh;
+    if (added) toast(`${added} new SMS ${added === 1 ? "entry" : "entries"} added`);
+    writeCache(month, finalRecs);
+    if (seq === loadSeq) { records = finalRecs; render(); }
   } catch (e) {
-    renderStatus("Couldn't load from Airtable — " + e.message + "<br><br>Check the base ID, table name and token in Settings.", true);
+    if (seq === loadSeq && !cached) renderStatus("Couldn't load from Airtable — " + e.message + "<br><br>Check the base ID, table name and token in Settings.", true);
+    else if (seq === loadSeq) toast("Offline — showing last saved data");
+  } finally {
+    if (seq === loadSeq) setSyncing(false);
   }
 }
+function setSyncing(on) { $("refreshBtn").classList.toggle("spin", on); }
 
 async function saveEntry() {
   const amount = parseFloat($("fAmount").value);
