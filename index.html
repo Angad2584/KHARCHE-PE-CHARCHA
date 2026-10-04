@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Kharch">
+<meta name="theme-color" content="#0f1012">
+<title>Kharch</title>
+<link rel="apple-touch-icon" id="touchIcon">
+<style>
+  :root {
+    --bg: #0f1012;
+    --surface: #18191c;
+    --surface2: #222327;
+    --line: rgba(255,255,255,0.08);
+    --text: #f2f0eb;
+    --muted: #8a8890;
+    --spent: #f26b5b;
+    --received: #3ecf8e;
+    --accent: #e8b44c;
+    --topup: #6aa8ff;
+    --r: 14px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html, body { background: var(--bg); }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
+    color: var(--text);
+    max-width: 480px; margin: 0 auto;
+    padding: calc(env(safe-area-inset-top) + 16px) 16px calc(env(safe-area-inset-bottom) + 96px);
+    min-height: 100vh;
+  }
+  button, input, select, textarea { font: inherit; color: inherit; }
+  .num { font-variant-numeric: tabular-nums; }
+
+  header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+  .brand { font-size: 22px; font-weight: 700; letter-spacing: -0.4px; }
+  .brand span { color: var(--accent); }
+  .iconbtn {
+    width: 38px; height: 38px; border-radius: 11px; border: 1px solid var(--line);
+    background: var(--surface2); display: grid; place-items: center; cursor: pointer;
+  }
+  .iconbtn svg { width: 18px; height: 18px; stroke: var(--muted); }
+
+  .month { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+  .month b { font-size: 17px; font-weight: 600; }
+
+  .net {
+    background: var(--surface); border: 1px solid var(--line); border-radius: var(--r);
+    padding: 18px; margin-bottom: 10px;
+  }
+  .label { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.6px; }
+  .net .big { font-size: 36px; font-weight: 700; letter-spacing: -1px; margin-top: 4px; }
+  .net .sub { font-size: 13px; color: var(--muted); margin-top: 4px; }
+
+  .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
+  .topline { font-size: 13px; color: var(--muted); padding: 2px 4px 20px; }
+  .topline b { color: var(--topup); font-weight: 600; }
+  .row.top .dot { background: var(--topup); }
+  .row.top .amt { color: var(--topup); }
+  .tile { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 14px; }
+  .tile .val { font-size: 20px; font-weight: 650; margin-top: 4px; }
+  .tile.spent .val { color: var(--spent); }
+  .tile.received .val { color: var(--received); }
+
+  .day { margin-bottom: 18px; }
+  .dayhead { display: flex; justify-content: space-between; font-size: 13px; color: var(--muted); padding: 0 4px 6px; }
+  .rows { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; }
+  .row { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-top: 1px solid var(--line); cursor: pointer; }
+  .row:first-child { border-top: 0; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--spent); }
+  .row.in .dot { background: var(--received); }
+  .row .mid { flex: 1; min-width: 0; }
+  .row .title { font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .row .meta { font-size: 12px; color: var(--muted); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .row .amt { font-size: 15px; font-weight: 600; }
+  .row.in .amt { color: var(--received); }
+
+  .empty, .status { text-align: center; color: var(--muted); font-size: 14px; padding: 40px 12px; line-height: 1.5; }
+  .status.err { color: var(--spent); }
+
+  .fab {
+    position: fixed; left: 50%; transform: translateX(-50%);
+    bottom: calc(env(safe-area-inset-bottom) + 20px);
+    background: var(--accent); color: #1a1408; border: 0; border-radius: 999px;
+    padding: 14px 28px; font-weight: 700; font-size: 16px; cursor: pointer;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+  }
+
+  /* Sheet */
+  .scrim { position: fixed; inset: 0; background: rgba(0,0,0,0.55); display: none; z-index: 20; }
+  .scrim.open { display: block; }
+  .sheet {
+    position: fixed; left: 0; right: 0; bottom: 0; max-width: 480px; margin: 0 auto;
+    background: var(--surface); border-radius: 20px 20px 0 0; border-top: 1px solid var(--line);
+    padding: 18px 16px calc(env(safe-area-inset-bottom) + 18px); z-index: 21;
+    transform: translateY(105%); visibility: hidden;
+    transition: transform 0.22s ease, visibility 0s linear 0.22s;
+    max-height: 92vh; overflow-y: auto;
+  }
+  .sheet.open { transform: translateY(0); visibility: visible; transition: transform 0.22s ease; }
+  .sheet h2 { font-size: 18px; margin-bottom: 14px; }
+  .seg { display: grid; grid-template-columns: 1fr 1fr 1fr; background: var(--surface2); border-radius: 12px; padding: 4px; margin-bottom: 14px; }
+  .seg button { border: 0; background: transparent; padding: 10px; border-radius: 9px; font-weight: 600; color: var(--muted); cursor: pointer; }
+  .seg button.on[data-t="Spent"] { background: var(--spent); color: #fff; }
+  .seg button.on[data-t="Received"] { background: var(--received); color: #06231a; }
+  .seg button.on[data-t="Top-up"] { background: var(--topup); color: #0a1830; }
+  .field { margin-bottom: 12px; }
+  .field label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+  .field input, .field select {
+    width: 100%; background: var(--surface2); border: 1px solid var(--line); border-radius: 11px;
+    padding: 12px; font-size: 16px; outline: none; -webkit-appearance: none; appearance: none;
+  }
+  .field input:focus { border-color: var(--accent); }
+  .amount-input { font-size: 28px !important; font-weight: 700; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .chip { border: 1px solid var(--line); background: var(--surface2); border-radius: 999px; padding: 6px 12px; font-size: 13px; cursor: pointer; }
+  .actions { display: flex; gap: 10px; margin-top: 6px; }
+  .btn { flex: 1; border: 0; border-radius: 12px; padding: 14px; font-weight: 700; font-size: 16px; cursor: pointer; }
+  .btn.primary { background: var(--accent); color: #1a1408; }
+  .btn.ghost { background: var(--surface2); }
+  .btn.danger { background: rgba(242,107,91,0.15); color: var(--spent); }
+  .btn:disabled { opacity: 0.5; }
+  .hint { font-size: 12px; color: var(--muted); line-height: 1.5; margin: 4px 0 14px; }
+
+  .toast {
+    position: fixed; left: 50%; top: calc(env(safe-area-inset-top) + 12px); transform: translateX(-50%);
+    background: var(--surface2); border: 1px solid var(--line); padding: 10px 16px; border-radius: 12px;
+    font-size: 14px; z-index: 30; display: none;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">kharch<span>.</span></div>
+  <div style="display:flex;gap:8px">
+    <button class="iconbtn" id="refreshBtn" aria-label="Refresh">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 4v5h-5"/></svg>
+    </button>
+    <button class="iconbtn" id="settingsBtn" aria-label="Settings">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+    </button>
+  </div>
+</header>
+
+<div class="month">
+  <button class="iconbtn" id="prevMonth" aria-label="Previous month"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round"><path d="M15 18l-6-6 6-6"/></svg></button>
+  <b id="monthLabel"></b>
+  <button class="iconbtn" id="nextMonth" aria-label="Next month"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round"><path d="M9 18l6-6-6-6"/></svg></button>
+</div>
+
+<section class="net">
+  <div class="label">Net out of your account</div>
+  <div class="big num" id="netVal">₹0</div>
+  <div class="sub" id="netSub">Spent − Received</div>
+</section>
+<section class="pair">
+  <div class="tile spent"><div class="label">Spent</div><div class="val num" id="spentVal">₹0</div></div>
+  <div class="tile received"><div class="label">Received</div><div class="val num" id="recvVal">₹0</div></div>
+</section>
+
+<div class="topline" id="topLine"></div>
+<main id="list"></main>
+
+<button class="fab" id="addBtn">+ Add</button>
+
+<div class="scrim" id="scrim"></div>
+
+<!-- Add / edit sheet -->
+<div class="sheet" id="entrySheet">
+  <h2 id="entryTitle">Add entry</h2>
+  <div class="seg" id="typeSeg">
+    <button data-t="Spent" class="on">Spent</button>
+    <button data-t="Received">Received</button>
+    <button data-t="Top-up">Top-up</button>
+  </div>
+  <div class="field">
+    <label for="fAmount">Amount (₹)</label>
+    <input id="fAmount" class="amount-input num" type="number" inputmode="decimal" step="0.01" min="0" placeholder="0">
+  </div>
+  <div class="field">
+    <label for="fMerchant" id="merchantLabel">Where / to whom</label>
+    <input id="fMerchant" type="text" placeholder="Swiggy, Metro, Rapido…" autocomplete="off">
+    <div class="chips" id="chips"></div>
+  </div>
+  <div class="field">
+    <label for="fDate">Date</label>
+    <input id="fDate" type="date">
+  </div>
+  <div class="field">
+    <label for="fNotes">Notes</label>
+    <input id="fNotes" type="text" placeholder="Optional" autocomplete="off">
+  </div>
+  <div class="actions">
+    <button class="btn danger" id="deleteBtn" style="display:none">Delete</button>
+    <button class="btn ghost" id="cancelBtn">Cancel</button>
+    <button class="btn primary" id="saveBtn">Save</button>
+  </div>
+</div>
+
+<!-- Settings sheet -->
+<div class="sheet" id="settingsSheet">
+  <h2>Settings</h2>
+  <p class="hint">These stay on this phone only. Use an Airtable token scoped to just this base, with <b>data.records:read</b> and <b>data.records:write</b>.</p>
+  <div class="field"><label for="sBase">Base ID</label><input id="sBase" type="text" placeholder="app…" autocomplete="off" autocapitalize="off" spellcheck="false"></div>
+  <div class="field"><label for="sTable">Table name or ID</label><input id="sTable" type="text" placeholder="Table 1" autocomplete="off" autocapitalize="off" spellcheck="false"></div>
+  <div class="field"><label for="sToken">Personal access token</label><input id="sToken" type="password" placeholder="pat…" autocomplete="off" autocapitalize="off" spellcheck="false"></div>
+  <div class="actions">
+    <button class="btn ghost" id="sCancel">Cancel</button>
+    <button class="btn primary" id="sSave">Save</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ---------- config ---------- */
+const F = { date: "DATE", amount: "AMOUNT", notes: "NOTES", merchant: "MERCHANT", source: "SOURCE", type: "TYPE" };
+const SPENT_CHIPS = ["Swiggy", "Metro", "Rapido", "Blinkit", "Hudle", "Coffee"];
+const RECV_CHIPS = ["Betting", "Refund", "Friend paid back"];
+const TOPUP_CHIPS = ["From salary account"];
+
+const store = {
+  get(k, d = "") { try { return localStorage.getItem("kharch." + k) ?? d; } catch { return d; } },
+  set(k, v) { try { localStorage.setItem("kharch." + k, v); } catch {} }
+};
+const cfg = () => ({ base: store.get("base"), table: store.get("table", "Table 1"), token: store.get("token") });
+
+/* ---------- state ---------- */
+let viewMonth = new Date(); viewMonth.setDate(1);
+let records = [];
+let editing = null;      // record being edited, or null
+let entryType = "Spent";
+
+/* ---------- helpers ---------- */
+const $ = id => document.getElementById(id);
+const inr = n => "₹" + Number(n || 0).toLocaleString("en-IN", { maximumFractionDigits: 2 });
+const pad = n => String(n).padStart(2, "0");
+const ymd = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const ym = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}`;
+const typeOf = r => r.fields[F.type] || "Spent";
+const isReceived = r => typeOf(r) === "Received";
+const isTopup = r => typeOf(r) === "Top-up";
+function toast(msg) {
+  const t = $("toast"); t.textContent = msg; t.style.display = "block";
+  clearTimeout(toast._t); toast._t = setTimeout(() => (t.style.display = "none"), 2400);
+}
+function esc(s) { return String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
+
+/* ---------- Airtable ---------- */
+async function at(path = "", opts = {}) {
+  const { base, table, token } = cfg();
+  const url = `https://api.airtable.com/v0/${encodeURIComponent(base)}/${encodeURIComponent(table)}${path}`;
+  const res = await fetch(url, {
+    ...opts,
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", ...(opts.headers || {}) }
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const msg = body?.error?.message || body?.error?.type || body?.error || res.statusText;
+    throw new Error(`${res.status}: ${msg}`);
+  }
+  return body;
+}
+
+async function loadMonth() {
+  const { base, token } = cfg();
+  if (!base || !token) { renderStatus("Open Settings (gear icon) and add your Airtable base ID and token to get started."); return; }
+  renderStatus("Loading…");
+  try {
+    const formula = `DATETIME_FORMAT({${F.date}}, 'YYYY-MM') = '${ym(viewMonth)}'`;
+    let all = [], offset = "";
+    do {
+      const q = new URLSearchParams({ filterByFormula: formula, pageSize: "100" });
+      q.append("sort[0][field]", F.date); q.append("sort[0][direction]", "desc");
+      if (offset) q.set("offset", offset);
+      const page = await at("?" + q.toString());
+      all = all.concat(page.records || []);
+      offset = page.offset || "";
+    } while (offset);
+    records = all;
+    render();
+  } catch (e) {
+    renderStatus("Couldn't load from Airtable — " + e.message + "<br><br>Check the base ID, table name and token in Settings.", true);
+  }
+}
+
+async function saveEntry() {
+  const amount = parseFloat($("fAmount").value);
+  const date = $("fDate").value;
+  if (!(amount > 0)) { toast("Enter an amount"); return; }
+  if (!date) { toast("Pick a date"); return; }
+  const fields = {
+    [F.date]: date,
+    [F.amount]: Math.round(amount * 100) / 100,
+    [F.merchant]: $("fMerchant").value.trim(),
+    [F.notes]: $("fNotes").value.trim(),
+    [F.type]: entryType
+  };
+  if (!editing) fields[F.source] = "manual";
+  $("saveBtn").disabled = true;
+  try {
+    if (editing) {
+      await at("", { method: "PATCH", body: JSON.stringify({ records: [{ id: editing.id, fields }], typecast: true }) });
+      toast("Updated");
+    } else {
+      await at("", { method: "POST", body: JSON.stringify({ records: [{ fields }], typecast: true }) });
+      toast(entryType === "Received" ? "Added to received" : entryType === "Top-up" ? "Top-up logged" : "Added");
+    }
+    closeSheets();
+    const d = new Date(date + "T00:00:00");
+    if (ym(d) !== ym(viewMonth)) { viewMonth = new Date(d.getFullYear(), d.getMonth(), 1); }
+    await loadMonth();
+  } catch (e) {
+    toast("Save failed — " + e.message);
+  } finally {
+    $("saveBtn").disabled = false;
+  }
+}
+
+async function deleteEntry() {
+  if (!editing) return;
+  if (!confirm("Delete this entry?")) return;
+  try {
+    await at("/" + editing.id, { method: "DELETE" });
+    toast("Deleted");
+    closeSheets();
+    await loadMonth();
+  } catch (e) { toast("Delete failed — " + e.message); }
+}
+
+/* ---------- render ---------- */
+function renderStatus(html, err = false) {
+  $("list").innerHTML = `<div class="status${err ? " err" : ""}">${html}</div>`;
+  setTotals(0, 0, 0);
+}
+function setTotals(spent, recv, top) {
+  $("topLine").innerHTML = top ? `Topped up from salary account: <b class="num">${inr(top)}</b> · not counted as spent or received` : "";
+  const net = spent - recv;
+  $("spentVal").textContent = inr(spent);
+  $("recvVal").textContent = inr(recv);
+  $("netVal").textContent = (net < 0 ? "−" : "") + inr(Math.abs(net));
+  $("netVal").style.color = net < 0 ? "var(--received)" : "var(--text)";
+  $("netSub").textContent = net < 0 ? "You're up this month (received more than spent)" : `${inr(spent)} spent − ${inr(recv)} received`;
+}
+function render() {
+  let spent = 0, recv = 0, top = 0;
+  for (const r of records) {
+    const a = Number(r.fields[F.amount]) || 0;
+    if (isTopup(r)) top += a; else if (isReceived(r)) recv += a; else spent += a;
+  }
+  setTotals(spent, recv, top);
+
+  if (!records.length) { $("list").innerHTML = `<div class="empty">Nothing logged this month yet.</div>`; return; }
+
+  const byDay = {};
+  for (const r of records) { const k = r.fields[F.date] || "No date"; (byDay[k] ||= []).push(r); }
+  const days = Object.keys(byDay).sort().reverse();
+
+  $("list").innerHTML = days.map(day => {
+    const rows = byDay[day];
+    const dayNet = rows.reduce((s, r) => s + (isTopup(r) ? 0 : isReceived(r) ? -1 : 1) * (Number(r.fields[F.amount]) || 0), 0);
+    const label = day === "No date" ? day : new Date(day + "T00:00:00").toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" });
+    return `<div class="day">
+      <div class="dayhead"><span>${esc(label)}</span><span class="num">${dayNet < 0 ? "+" + inr(-dayNet) : inr(dayNet)}</span></div>
+      <div class="rows">${rows.map(r => {
+        const f = r.fields, inn = isReceived(r), tp = isTopup(r);
+        const title = f[F.merchant] || f[F.notes] || typeOf(r);
+        const meta = [f[F.merchant] && f[F.notes] ? f[F.notes] : "", f[F.source] || ""].filter(Boolean).join(" · ");
+        return `<div class="row${inn ? " in" : ""}${tp ? " top" : ""}" data-id="${r.id}">
+          <span class="dot"></span>
+          <div class="mid"><div class="title">${esc(title)}</div>${meta ? `<div class="meta">${esc(meta)}</div>` : ""}</div>
+          <div class="amt num">${inn ? "+" : tp ? "⇄ " : ""}${inr(f[F.amount])}</div>
+        </div>`;
+      }).join("")}</div>
+    </div>`;
+  }).join("");
+}
+function renderMonthLabel() {
+  $("monthLabel").textContent = viewMonth.toLocaleDateString("en-IN", { month: "long", year: "numeric" });
+}
+
+/* ---------- sheets ---------- */
+function setType(t) {
+  entryType = t;
+  document.querySelectorAll("#typeSeg button").forEach(b => b.classList.toggle("on", b.dataset.t === t));
+  $("merchantLabel").textContent = t === "Spent" ? "Where / to whom" : t === "Received" ? "From / what for" : "From which account";
+  $("fMerchant").placeholder = t === "Spent" ? "Swiggy, Metro, Rapido…" : t === "Received" ? "Betting, refund, friend…" : "Salary account";
+  $("chips").innerHTML = (t === "Spent" ? SPENT_CHIPS : t === "Received" ? RECV_CHIPS : TOPUP_CHIPS).map(c => `<button class="chip" type="button">${esc(c)}</button>`).join("");
+}
+function openEntry(rec = null) {
+  editing = rec;
+  $("entryTitle").textContent = rec ? "Edit entry" : "Add entry";
+  $("deleteBtn").style.display = rec ? "block" : "none";
+  const f = rec?.fields || {};
+  setType(rec ? (f[F.type] || "Spent") : "Spent");
+  $("fAmount").value = f[F.amount] ?? "";
+  $("fMerchant").value = f[F.merchant] ?? "";
+  $("fNotes").value = f[F.notes] ?? "";
+  $("fDate").value = f[F.date] || ymd(new Date());
+  $("scrim").classList.add("open"); $("entrySheet").classList.add("open");
+  if (!rec) setTimeout(() => $("fAmount").focus(), 250);
+}
+function openSettings() {
+  const c = cfg();
+  $("sBase").value = c.base; $("sTable").value = c.table; $("sToken").value = c.token;
+  $("scrim").classList.add("open"); $("settingsSheet").classList.add("open");
+}
+function closeSheets() {
+  $("scrim").classList.remove("open");
+  $("entrySheet").classList.remove("open");
+  $("settingsSheet").classList.remove("open");
+  editing = null;
+}
+
+/* ---------- wire up ---------- */
+$("addBtn").onclick = () => openEntry();
+$("settingsBtn").onclick = openSettings;
+$("refreshBtn").onclick = loadMonth;
+$("scrim").onclick = closeSheets;
+$("cancelBtn").onclick = closeSheets;
+$("sCancel").onclick = closeSheets;
+$("saveBtn").onclick = saveEntry;
+$("deleteBtn").onclick = deleteEntry;
+$("typeSeg").onclick = e => { const t = e.target.closest("button")?.dataset.t; if (t) setType(t); };
+$("chips").onclick = e => { if (e.target.classList.contains("chip")) $("fMerchant").value = e.target.textContent; };
+$("list").onclick = e => { const row = e.target.closest(".row"); if (row) openEntry(records.find(r => r.id === row.dataset.id)); };
+$("prevMonth").onclick = () => { viewMonth = new Date(viewMonth.getFullYear(), viewMonth.getMonth() - 1, 1); renderMonthLabel(); loadMonth(); };
+$("nextMonth").onclick = () => { viewMonth = new Date(viewMonth.getFullYear(), viewMonth.getMonth() + 1, 1); renderMonthLabel(); loadMonth(); };
+$("sSave").onclick = () => {
+  store.set("base", $("sBase").value.trim());
+  store.set("table", $("sTable").value.trim() || "Table 1");
+  store.set("token", $("sToken").value.trim());
+  closeSheets(); toast("Saved"); loadMonth();
+};
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && cfg().token) loadMonth(); });
+
+/* Home-screen icon, drawn at load so the app stays a single file */
+(function makeIcon() {
+  const c = document.createElement("canvas"); c.width = c.height = 180;
+  const x = c.getContext("2d");
+  x.fillStyle = "#0f1012"; x.fillRect(0, 0, 180, 180);
+  x.fillStyle = "#e8b44c"; x.font = "bold 112px -apple-system, Segoe UI, sans-serif";
+  x.textAlign = "center"; x.textBaseline = "middle"; x.fillText("₹", 90, 96);
+  $("touchIcon").href = c.toDataURL("image/png");
+})();
+
+renderMonthLabel();
+loadMonth();
+</script>
+</body>
+</html>
