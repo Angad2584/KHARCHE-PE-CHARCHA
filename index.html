@@ -302,6 +302,39 @@ function parseSms(sms) {
   return null; // OTPs, offers, anything else
 }
 
+/* Transaction date as written in the SMS. RBL uses three formats:
+   "on 04-10-26" (dd-mm-yy), "on 17-09-2026" (dd-mm-yyyy), "on 2026-09-16 16:11:44" (yyyy-mm-dd).
+   Returns "YYYY-MM-DD", or "" if no valid date is found. */
+function smsDate(sms) {
+  const s = String(sms || "");
+  let y, m, d, x;
+  if ((x = s.match(/\bon (\d{4})-(\d{2})-(\d{2})\b/))) [, y, m, d] = x;
+  else if ((x = s.match(/\bon (\d{2})-(\d{2})-(\d{4})\b/))) [, d, m, y] = x;
+  else if ((x = s.match(/\bon (\d{2})-(\d{2})-(\d{2})\b/))) { [, d, m, y] = x; y = "20" + y; }
+  else return "";
+  const dt = new Date(+y, +m - 1, +d);
+  if (dt.getFullYear() !== +y || dt.getMonth() !== +m - 1 || dt.getDate() !== +d) return "";
+  return ymd(dt);
+}
+
+/* One-off repair: SMS rows that were dated by arrival day instead of the SMS date.
+   Only touches rows whose DATE still equals the day they were added, so dates you edited yourself are left alone. */
+async function fixSmsDates(recs) {
+  const fixes = [];
+  for (const r of recs) {
+    const f = r.fields;
+    if (f[F.source] !== "sms" || !f.RAW) continue;
+    const want = smsDate(f.RAW);
+    if (want && want !== f[F.date] && f[F.date] === ymd(new Date(r.createdTime))) {
+      fixes.push({ id: r.id, fields: { [F.date]: want } });
+    }
+  }
+  for (let i = 0; i < fixes.length; i += 10) {
+    await at("", { method: "PATCH", body: JSON.stringify({ records: fixes.slice(i, i + 10) }) });
+  }
+  return fixes.length;
+}
+
 async function processRawSms() {
   const q = new URLSearchParams({ filterByFormula: `{${F.source}} = 'sms-raw'`, pageSize: "100" });
   const page = await at("?" + q.toString());
@@ -312,7 +345,7 @@ async function processRawSms() {
     const p = parseSms(r.fields.RAW);
     if (!p) { junk.push(r.id); continue; }
     updates.push({ id: r.id, fields: {
-      [F.date]: ymd(new Date(r.createdTime)),
+      [F.date]: smsDate(r.fields.RAW) || ymd(new Date(r.createdTime)),
       [F.amount]: p.amount, [F.type]: p.type, [F.merchant]: p.merchant, [F.notes]: p.notes, [F.source]: "sms"
     }});
   }
@@ -363,8 +396,10 @@ async function loadMonth() {
       fetchMonth(month),
       processRawSms().catch(e => { toast("Couldn't read new SMS — " + e.message); return 0; })
     ]);
-    const finalRecs = added ? await fetchMonth(month) : fresh;
+    const fixed = await fixSmsDates(fresh).catch(() => 0);
+    const finalRecs = (added || fixed) ? await fetchMonth(month) : fresh;
     if (added) toast(`${added} new SMS ${added === 1 ? "entry" : "entries"} added`);
+    else if (fixed) toast(`Corrected the date on ${fixed} ${fixed === 1 ? "entry" : "entries"}`);
     writeCache(month, finalRecs);
     if (seq === loadSeq) { records = finalRecs; render(); }
   } catch (e) {
